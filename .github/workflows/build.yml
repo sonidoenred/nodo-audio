@@ -1,0 +1,138 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  JUCE_TAG: 9.0.1
+  PLUGINVAL_VERSION: v1.0.4
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Necesario para colgar los ZIP de la release; por defecto el token del
+    # workflow es de solo lectura.
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+          - name: Windows
+            os: windows-2022
+          - name: Linux
+            os: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libjack-jackd2-dev \
+            libfreetype-dev libfontconfig1-dev libx11-dev libxcomposite-dev \
+            libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxrender-dev libglu1-mesa-dev mesa-common-dev libcurl4-openssl-dev \
+            libxi-dev libxtst-dev xvfb
+
+      - name: Fetch JUCE
+        run: git clone --depth 1 --branch ${{ env.JUCE_TAG }} https://github.com/juce-framework/JUCE.git libs/JUCE
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      # The DSP checks are the gate: a filter that is quietly 3 dB wrong compiles
+      # perfectly, so nothing ships without these passing.
+      - name: Run DSP verification
+        shell: bash
+        run: |
+          if [ -f "build/tests/nodo_tests_artefacts/Release/nodo_tests" ]; then
+            "build/tests/nodo_tests_artefacts/Release/nodo_tests"
+          else
+            "build/tests/nodo_tests_artefacts/Release/nodo_tests.exe"
+          fi
+
+      # pluginval covers what the DSP tests cannot: opening and closing the
+      # editor hundreds of times, automating every parameter from the host,
+      # saving and restoring state off the message thread, odd buffer sizes and
+      # bus layouts. Level 10 is its strictest setting.
+      - name: Fetch pluginval
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)   NAME=pluginval_Linux.zip ;;
+            macOS)   NAME=pluginval_macOS.zip ;;
+            Windows) NAME=pluginval_Windows.zip ;;
+          esac
+          curl -sL -o pluginval.zip \
+            "https://github.com/Tracktion/pluginval/releases/download/${{ env.PLUGINVAL_VERSION }}/$NAME"
+          7z x pluginval.zip -opluginval || unzip -q pluginval.zip -d pluginval
+
+      # Every plugin in the suite gets validated, not just the first one: the
+      # shared modules mean a change to the header or the preset system can
+      # break a plugin nobody touched.
+      - name: Validate the plugins
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Linux)
+              BIN=$(find pluginval -name pluginval -type f | head -1)
+              chmod +x "$BIN"
+              RUN="xvfb-run -a $BIN"
+              ;;
+            macOS)
+              # The macOS release ships an .app bundle, so the binary lives
+              # inside it. Searching for a plain "pluginval" directory would
+              # match the extraction folder itself and find nothing.
+              RUN=$(find pluginval -name "pluginval.app" -maxdepth 3 | head -1)/Contents/MacOS/pluginval
+              ;;
+            Windows)
+              RUN=$(find pluginval -name "pluginval.exe" | head -1)
+              ;;
+          esac
+
+          for NAME in "Nodo EQ" "Nodo Comp" "Nodo Limit" "Nodo Ess" "Nodo Gate" "Nodo Delay" "Nodo Verb"; do
+            VST3=$(find build -name "$NAME.vst3" | head -1)
+            echo "== $NAME =="
+            $RUN --strictness-level 10 --validate-in-process --timeout-ms 900000 --validate "$VST3"
+          done
+
+      # The distributable is a plain ZIP, not an installer. Nothing in it is
+      # executable, so Windows SmartScreen never gets involved.
+      # Un ZIP por plugin, no uno con la suite entera: cada plugin tiene su
+      # ficha y su boton de descarga en la web, y el ZIP que sale de aqui es
+      # exactamente el archivo que se sube a sonidoenred.com.
+      - name: Package
+        shell: bash
+        run: ./packaging/empaquetar.sh
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodo-${{ matrix.name }}
+          path: dist/
+
+      # Al empujar una etiqueta v1.0.0 los ZIP se cuelgan de la release, que es
+      # de donde tira el boton de descarga de la web. Cada sistema sube los
+      # suyos a la misma release y GitHub los va acumulando.
+      #
+      # Solo pasa si los tests y pluginval han pasado antes: son pasos del
+      # mismo job, y un fallo lo corta. Publicar un binario que no ha pasado la
+      # verificacion seria peor que no publicar nada.
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          fail_on_unmatched_files: true

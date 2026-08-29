@@ -1,0 +1,50 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+QUÉ HAY EN ESTE ZIP
+===================
+
+    %PRODUCTO%.vst3        el plugin en formato VST3 (es una carpeta)
+    %PRODUCTO%             la aplicación suelta, para usarlo sin DAW
+
+Compilado en Ubuntu 24.04, 64 bits. En distribuciones más antiguas puede
+fallar por la versión de la biblioteca del sistema; si te pasa, dímelo y
+te digo cómo compilarlo tú mismo, que son tres comandos.
+
+
+CÓMO INSTALARLO
+===============
+
+1. Descomprime el ZIP.
+
+2. Copia la carpeta del plugin a la carpeta de VST3 de tu usuario:
+
+       mkdir -p ~/.vst3
+       cp -R "%PRODUCTO%.vst3" ~/.vst3/
+
+   Para instalarlo en todo el sistema, usa /usr/lib/vst3/ en su lugar.
+
+3. Da permiso de ejecución a la aplicación suelta si la vas a usar:
+
+       chmod +x "%PRODUCTO%"
+
+4. Abre tu DAW y vuelve a escanear. En Reaper es
+   Opciones > Preferencias > Plug-ins > VST > Re-escanear.
+   Aparece bajo el fabricante "SonidoenRed".
+
+
+DESINSTALAR
+===========
+
+    rm -rf ~/.vst3/"%PRODUCTO%.vst3"
+
+Los presets que hayas guardado están en
+~/Documents/Nodo/%PRODUCTO%/Presets y no se borran solos.
+
+
+PROBLEMAS O SUGERENCIAS
+=======================
+
+Escríbeme desde sonidoenred.com. Dime qué distribución y qué DAW usas.

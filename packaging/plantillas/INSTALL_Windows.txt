@@ -1,0 +1,64 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+WHAT IS IN THIS ZIP
+===================
+
+    %PRODUCTO%.vst3        the plugin, VST3 format (it is a folder, even
+                           though the name ends in .vst3)
+    %PRODUCTO%.exe         the standalone app, to use it without a DAW
+
+Windows 10 or later, 64-bit.
+
+
+HOW TO INSTALL
+==============
+
+1. Unzip the file. In Explorer: right-click the ZIP > Extract All.
+   Opening the ZIP and dragging from inside it does not work; it has to
+   be properly extracted.
+
+2. Copy the whole %PRODUCTO%.vst3 folder into:
+
+       C:\Program Files\Common Files\VST3\
+
+   Accept the administrator prompt if Windows asks for one.
+
+   The standalone app goes wherever you like.
+
+3. Open your DAW and rescan your plugins. In Reaper it is
+   Options > Preferences > Plug-ins > VST > Re-scan. Other programs
+   usually have it under plugin preferences.
+
+4. It shows up under the manufacturer "SonidoenRed".
+
+
+IF YOUR ANTIVIRUS COMPLAINS
+===========================
+
+This plugin is not digitally signed. Code signing costs money and Nodo is
+free, so for now it ships unsigned. Some antivirus products show a
+generic warning when they do not recognise a file.
+
+If you want to check for yourself, upload the ZIP to virustotal.com
+before installing it.
+
+
+UNINSTALLING
+============
+
+Delete the folder from C:\Program Files\Common Files\VST3\ and rescan in
+your DAW.
+
+Presets you saved live in Documents\Nodo\%PRODUCTO%\Presets and are not
+removed automatically.
+
+
+PROBLEMS OR SUGGESTIONS
+=======================
+
+Write to me through sonidoenred.com. Tell me which DAW you use, which
+Windows version and what you were doing: without that it is very hard to
+reproduce anything.

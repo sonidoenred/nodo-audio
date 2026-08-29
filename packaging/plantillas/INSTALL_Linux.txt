@@ -1,0 +1,51 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+WHAT IS IN THIS ZIP
+===================
+
+    %PRODUCTO%.vst3        the plugin, VST3 format (it is a folder)
+    %PRODUCTO%             the standalone app, to use it without a DAW
+
+Built on Ubuntu 24.04, 64-bit. On older distributions it may fail because
+of the system library version; if that happens, get in touch and I will
+tell you how to build it yourself, which is three commands.
+
+
+HOW TO INSTALL
+==============
+
+1. Unzip the file.
+
+2. Copy the plugin folder into your user VST3 folder:
+
+       mkdir -p ~/.vst3
+       cp -R "%PRODUCTO%.vst3" ~/.vst3/
+
+   For a system-wide install, use /usr/lib/vst3/ instead.
+
+3. Make the standalone app executable if you want to use it:
+
+       chmod +x "%PRODUCTO%"
+
+4. Open your DAW and rescan. In Reaper it is
+   Options > Preferences > Plug-ins > VST > Re-scan.
+   It shows up under the manufacturer "SonidoenRed".
+
+
+UNINSTALLING
+============
+
+    rm -rf ~/.vst3/"%PRODUCTO%.vst3"
+
+Presets you saved live in ~/Documents/Nodo/%PRODUCTO%/Presets and are not
+removed automatically.
+
+
+PROBLEMS OR SUGGESTIONS
+=======================
+
+Write to me through sonidoenred.com. Tell me which distribution and which
+DAW you use.

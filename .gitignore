@@ -1,0 +1,9 @@
+# JUCE se clona con ./setup.sh, no se versiona: son 200 MB que no son nuestros.
+libs/JUCE/
+
+build/
+dist/
+.DS_Store
+*.user
+.vscode/
+.idea/

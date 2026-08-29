@@ -1,0 +1,89 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+QUÉ HAY EN ESTE ZIP
+===================
+
+    %PRODUCTO%.vst3        el plugin en formato VST3
+    %PRODUCTO%.component   el plugin en formato Audio Unit (Logic, GarageBand)
+    %PRODUCTO%.app         la aplicación suelta, para usarlo sin DAW
+
+Es un archivo universal: funciona igual en Mac de chip Apple y en Mac Intel.
+Necesita macOS 10.15 o posterior.
+
+
+CÓMO INSTALARLO
+===============
+
+1. Descomprime este ZIP.
+
+2. Copia cada archivo a su carpeta:
+
+       %PRODUCTO%.vst3       ->  /Library/Audio/Plug-Ins/VST3/
+       %PRODUCTO%.component  ->  /Library/Audio/Plug-Ins/Components/
+
+   Si prefieres instalarlo solo para tu usuario, usa
+   ~/Library/Audio/Plug-Ins/ en lugar de /Library/Audio/Plug-Ins/
+   (la carpeta ~/Library está oculta: en el Finder pulsa Cmd+Shift+G
+   y escribe la ruta).
+
+   La aplicación suelta va donde quieras, por ejemplo a Aplicaciones.
+
+3. Abre tu DAW y vuelve a escanear los plugins. Logic escanea las
+   Audio Units al arrancar.
+
+
+IMPORTANTE: macOS VA A BLOQUEARLO LA PRIMERA VEZ
+================================================
+
+Este plugin no está firmado ni notarizado por Apple. Firmar cuesta
+99 dólares al año y Nodo es gratis, así que de momento va sin firmar.
+
+macOS marca cualquier archivo descargado como "en cuarentena" y se
+niega a cargarlo. Para quitar esa marca, abre la aplicación Terminal
+y pega estas dos líneas, una cada vez:
+
+    xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/VST3/%PRODUCTO%.vst3"
+    xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/%PRODUCTO%.component"
+
+(Si lo instalaste solo para tu usuario, añade ~ delante de /Library.)
+
+Eso le dice al sistema que confías en el archivo. Después, vuelve a
+escanear en tu DAW.
+
+Con la aplicación suelta es más fácil: haz clic derecho sobre ella y
+elige Abrir. La primera vez macOS pregunta, y con eso ya queda.
+
+Sé que es molesto. Si Nodo llega a tener suficiente uso como para
+justificar la cuota de Apple, este paso desaparecerá.
+
+
+SI TU DAW NO LO ENCUENTRA
+=========================
+
+- Logic solo carga Audio Units, no VST3: comprueba que el .component
+  está en su sitio. Si sigue sin aparecer, en Terminal:
+  killall -9 AudioComponentRegistrar  y vuelve a abrir Logic.
+- Pro Tools necesita AAX, que todavía no existe para Nodo.
+- Reaper y Ableton escanean VST3; en Reaper es
+  Preferencias > Plug-ins > VST > Re-escanear.
+- Aparece bajo el fabricante "SonidoenRed".
+
+
+DESINSTALAR
+===========
+
+Borra los archivos de sus carpetas y vuelve a escanear.
+
+Los presets que hayas guardado están en
+~/Documents/Nodo/%PRODUCTO%/Presets y no se borran solos.
+
+
+PROBLEMAS O SUGERENCIAS
+=======================
+
+Escríbeme desde sonidoenred.com. Dime qué DAW usas, qué versión de
+macOS, si tu Mac es de chip Apple o Intel, y qué estabas haciendo:
+sin eso es muy difícil reproducir nada.

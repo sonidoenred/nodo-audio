@@ -1,0 +1,87 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+WHAT IS IN THIS ZIP
+===================
+
+    %PRODUCTO%.vst3        the plugin, VST3 format
+    %PRODUCTO%.component   the plugin, Audio Unit format (Logic, GarageBand)
+    %PRODUCTO%.app         the standalone app, to use it without a DAW
+
+Universal binary: it runs natively on both Apple silicon and Intel Macs.
+Requires macOS 10.15 or later.
+
+
+HOW TO INSTALL
+==============
+
+1. Unzip the file.
+
+2. Copy each item to its folder:
+
+       %PRODUCTO%.vst3       ->  /Library/Audio/Plug-Ins/VST3/
+       %PRODUCTO%.component  ->  /Library/Audio/Plug-Ins/Components/
+
+   To install it only for your user, use ~/Library/Audio/Plug-Ins/
+   instead of /Library/Audio/Plug-Ins/ (the ~/Library folder is hidden:
+   in Finder press Cmd+Shift+G and type the path).
+
+   The standalone app goes wherever you like, for example Applications.
+
+3. Open your DAW and rescan your plugins. Logic scans Audio Units on
+   startup.
+
+
+IMPORTANT: macOS WILL BLOCK IT THE FIRST TIME
+=============================================
+
+This plugin is not signed or notarised by Apple. Signing costs 99 dollars
+a year and Nodo is free, so for now it ships unsigned.
+
+macOS flags every downloaded file as quarantined and refuses to load it.
+To clear that flag, open Terminal and paste these two lines, one at a
+time:
+
+    xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/VST3/%PRODUCTO%.vst3"
+    xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/%PRODUCTO%.component"
+
+(If you installed it for your user only, put ~ in front of /Library.)
+
+That tells the system you trust the file. Then rescan in your DAW.
+
+The standalone app is easier: right-click it and choose Open. macOS asks
+once and that is it.
+
+I know it is annoying. If Nodo gets enough use to justify Apple's fee,
+this step goes away.
+
+
+IF YOUR DAW CANNOT FIND IT
+==========================
+
+- Logic only loads Audio Units, not VST3: check that the .component is
+  where it belongs. If it still does not show up, run
+  killall -9 AudioComponentRegistrar  in Terminal and reopen Logic.
+- Pro Tools needs AAX, which does not exist for Nodo yet.
+- Reaper and Ableton scan VST3; in Reaper it is
+  Preferences > Plug-ins > VST > Re-scan.
+- It shows up under the manufacturer "SonidoenRed".
+
+
+UNINSTALLING
+============
+
+Delete the files from their folders and rescan.
+
+Presets you saved live in ~/Documents/Nodo/%PRODUCTO%/Presets and are
+not removed automatically.
+
+
+PROBLEMS OR SUGGESTIONS
+=======================
+
+Write to me through sonidoenred.com. Tell me which DAW you use, which
+macOS version, whether your Mac is Apple silicon or Intel, and what you
+were doing: without that it is very hard to reproduce anything.

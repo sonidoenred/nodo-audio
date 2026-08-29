@@ -1,0 +1,63 @@
+%PRODUCTO% %VERSION%
+NODO  ·  by SonidoenRed
+sonidoenred.com
+
+
+QUÉ HAY EN ESTE ZIP
+===================
+
+    %PRODUCTO%.vst3        el plugin en formato VST3 (es una carpeta,
+                           aunque el nombre termine en .vst3)
+    %PRODUCTO%.exe         la aplicación suelta, para usarlo sin DAW
+
+Windows 10 o posterior, 64 bits.
+
+
+CÓMO INSTALARLO
+===============
+
+1. Descomprime este ZIP. Con el Explorador: clic derecho sobre el
+   archivo > Extraer todo. No sirve entrar dentro del ZIP y arrastrar
+   desde ahí: hay que extraerlo de verdad.
+
+2. Copia la carpeta %PRODUCTO%.vst3 entera dentro de:
+
+       C:\Program Files\Common Files\VST3\
+
+   Si Windows te pide permisos de administrador, acepta.
+
+   La aplicación suelta va donde quieras.
+
+3. Abre tu DAW y haz un nuevo escaneo de plugins. En Reaper es
+   Opciones > Preferencias > Plug-ins > VST > Re-escanear. En otros
+   programas suele estar en las preferencias de plugins.
+
+4. Aparecerá en la lista bajo el fabricante "SonidoenRed".
+
+
+SI TU ANTIVIRUS SE QUEJA
+========================
+
+Este plugin no está firmado digitalmente. Firmar cuesta dinero y Nodo
+es gratis, así que de momento va sin firma. Eso significa que algunos
+antivirus pueden mostrar un aviso genérico al no reconocer el archivo.
+
+Si quieres comprobarlo por tu cuenta, puedes subir el ZIP a
+virustotal.com antes de instalarlo.
+
+
+DESINSTALAR
+===========
+
+Borra la carpeta de C:\Program Files\Common Files\VST3\
+y vuelve a escanear en tu DAW.
+
+Los presets que hayas guardado están en
+Documentos\Nodo\%PRODUCTO%\Presets y no se borran solos.
+
+
+PROBLEMAS O SUGERENCIAS
+=======================
+
+Escríbeme desde sonidoenred.com. Dime qué DAW usas, qué versión de
+Windows y qué estabas haciendo: sin eso es muy difícil reproducir nada.
