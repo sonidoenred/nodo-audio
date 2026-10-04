@@ -116,6 +116,11 @@ NodoEssEditor::NodoEssEditor (NodoEssProcessor& processorToUse)
     header.onSlotSelected = [this] (bool isB) { processor.switchToSlot (isB); };
     header.onCopyToOtherSlot = [this] { processor.copyCurrentSlotToOther(); };
     header.setLevelSource ([this] (int index) { return processor.getMeterLevel (index); });
+    header.setRmsSource ([this] (int index) { return processor.getMeterRms (index); });
+    header.setProblemReportSource ([this]
+    {
+        return nodo::buildProblemReport (processor, JucePlugin_VersionString);
+    });
     header.setSlot (processor.isSlotB());
 
     constrainer.setSizeLimits (780, 461, 1700, 1004);

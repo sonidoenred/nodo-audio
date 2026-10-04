@@ -49,6 +49,9 @@ public:
     float getAdaptiveReferenceDb() const noexcept { return engine.getAdaptiveReferenceDb(); }
     float getMeterLevel (int index) const noexcept;
 
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
+
     void switchToSlot (bool useSlotB);
     void copyCurrentSlotToOther();
     bool isSlotB() const noexcept { return slotIsB; }

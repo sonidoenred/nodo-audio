@@ -90,7 +90,7 @@ cmake --build build --target nodo_tests
 ./build/tests/nodo_tests_artefacts/Release/nodo_tests
 ```
 
-382 comprobaciones. Del EQ, 135, sobre la respuesta de los filtros: ganancia exacta en el centro
+402 comprobaciones. Del EQ, 155, sobre la respuesta de los filtros: ganancia exacta en el centro
 de las campanas, −3,01 dB en la frecuencia de corte, pendientes asintóticas de
 12 a 96 dB por octava, planitud de la banda pasante, planitud absoluta del all
 pass, el recorrido completo del tilt shelf, los filtros de escucha del solo (un
@@ -100,7 +100,14 @@ analizador, precisión de la medida de pico, un barrido completo del diseño
 analógico contra su prototipo, y el enrutado M/S y L/R medido de extremo a
 extremo: una banda Mid tiene que ser sorda a una señal puramente lateral, y la
 ida y vuelta a mid/side tiene que devolver la señal intacta hasta la millonésima
-de fondo de escala. Y la sección dinámica entera: la forma cerrada de la rodilla,
+de fondo de escala. Y lo que solo existe dentro de processBlock, que ninguna
+prueba del motor toca: que el delta es exactamente la señal procesada menos la
+seca, muestra a muestra; que en bypass el impulso sale con el retardo que el
+plugin declara, ni antes ni después; que la línea de retardo de la señal seca
+retrasa lo que dice, también cruzando el límite entre dos bloques; que un
+detector de banda ancha mueve una banda de 8 kHz con un tono de 100 Hz y uno
+normal no; y que ordenar las bandas por frecuencia no cambia la respuesta en
+ninguna de treinta frecuencias medidas. Y la sección dinámica entera: la forma cerrada de la rodilla,
 la monotonía de la curva de ganancia, los tiempos del seguidor de envolvente
 medidos contra su constante de tiempo, y el comportamiento de extremo a extremo
 con material fuerte, flojo y fuera de banda. Y los presets de fábrica: que cada
@@ -224,6 +231,15 @@ ejecuta con `--randomise`**, que es la forma más rápida de encontrárselo. Si
 alguna vez el CI se pone rojo con "not restored on setStateInformation", es
 esto.
 
+**Y un aviso sobre validar mientras se compila.** Si pluginval dice «Unable to
+load VST-3 plug-in file» en un plugin que funcionaba hace cinco minutos, mira el
+tamaño del `.so` de dentro del paquete antes de buscar el fallo en el código: el
+enlazado con LTO tarda minutos y durante ese rato el archivo existe y mide cero
+bytes. Pasó exactamente eso con Nodo Ess mientras se escribía esta versión, y es
+casi seguro la explicación del fallo de pluginval que una vez no supimos
+explicar. Valida cuando la compilación haya terminado del todo, no cuando el
+plugin que te interesa ya esté hecho.
+
 ### Consumo de CPU
 
 ```bash
@@ -290,6 +306,30 @@ visual, medidores ni versionado de estado: aportó su DSP y su pantalla. La
 reverb, que es el plugin más grande de los siete por dentro, entró igual: lo
 único suyo son el motor, la curva de caída y la pantalla que la dibuja.
 
+Y funciona en las dos direcciones: los medidores de la cabecera pasaron a
+escribir el pico y el RMS en números, y los siete plugins los tienen desde el
+mismo commit sin que ninguno tocara su pantalla. Lo mismo con «Report a
+problem», que cuelga del nombre del plugin en la cabecera.
+
+**Reportar un problema.** Pulsar el nombre del plugin abre un menú con un
+informe ya escrito: versión y formato, anfitrión, sistema y procesador,
+frecuencia de muestreo, tamaño de bloque, canales y latencia declarada, más tres
+líneas en blanco para contar qué pasó, qué se esperaba y cómo repetirlo. Es todo
+lo que siempre hay que preguntar por correo y que casi nadie manda a la primera.
+
+El plugin no lo envía a ningún sitio. Copia el texto al portapapeles y, si se le
+pide, abre el formulario de contacto de la web en el navegador. La red la pone
+el navegador, con el usuario delante y viendo exactamente qué se manda. Un
+plugin de audio que abre conexiones por su cuenta es algo que la gente audita
+con un cortafuegos y publica en un foro, y con razón. Por lo mismo, en el
+informe no va nada que identifique a nadie: ni rutas, ni nombre de usuario, ni
+qué presets tiene.
+
+Tampoco hay informe de caídas, y no es por pereza: cuando un plugin se cae se
+lleva por delante al anfitrión, y capturar eso obliga a instalar manejadores de
+señal dentro de su proceso, en medio de todos los demás plugins cargados. Eso es
+algo que un plugin no debe hacer.
+
 ### Decisiones que conviene no deshacer sin pensarlo
 
 - **`shared/nodo_core/dsp/Biquad.h` en vez de `juce::dsp::IIR`.** Las funciones
@@ -344,6 +384,37 @@ ganancia ±24 dB, Q 0,1 – 18, y pendientes de 12 a 96 dB/oct en los cortes.
 | Alt + clic sobre un nodo | solo de esa banda |
 | Doble clic sobre un nodo | desactiva la banda |
 | Clic derecho sobre un nodo | tipo, pendiente, solo, invertir ganancia, borrar |
+| Clic derecho en el fondo | ordenar las bandas por frecuencia |
+
+**Delta.** Saca por los altavoces la señal procesada menos la seca: solo lo que
+el ecualizador está haciendo. Es la misma pregunta que responde el solo de banda
+—¿qué me estoy llevando?— pero del plugin entero, y sirve sobre todo para
+descubrir que un corte que parecía quirúrgico se está llevando medio bombo. La
+resta se hace después de la ganancia de salida, porque lo que uno quiere oír es
+la diferencia que sale del plugin, y contra la señal seca **retrasada** la misma
+latencia que el plugin declara: con el sobremuestreo encendido, restar la seca
+sin retrasar no da la diferencia, da un efecto de peine.
+
+Esa alineación arregló de paso algo que estaba mal desde el principio: el
+fundido del bypass usaba la seca sin retrasar, así que con el sobremuestreo
+encendido una pista en bypass sonaba adelantada respecto a las demás, porque el
+anfitrión seguía compensando una latencia que el plugin declaraba y ya no
+aplicaba. Son cuatro muestras a 48 kHz y nadie lo habría oído, pero estaba mal.
+
+**Detector de banda ancha.** Cada banda dinámica decide de dónde escucha: de su
+propia zona filtrada, que es lo que convierte una banda en un de-esser, o de la
+señal entera. Lo segundo es lo que hace falta cuando lo que tiene que disparar
+la banda no suena donde la banda actúa —bajar los graves cuando entra el bombo,
+por ejemplo—, y es una cosa que un ecualizador dinámico sin ese interruptor
+sencillamente no puede hacer.
+
+**Ordenar por frecuencia.** Con 24 bandas creadas a doble clic donde hiciera
+falta, los números de los nodos acaban sin ningún orden. El menú del fondo las
+reordena de grave a agudo y manda las apagadas al final. El número de banda es
+lo único que la identifica en el panel, en el teclado y en la automatización del
+anfitrión, así que poder ponerlos en orden de una vez vale la pena. Un test
+comprueba que la respuesta medida en treinta frecuencias es idéntica antes y
+después: lo único que cambia son las etiquetas.
 
 **Solo por banda.** Aísla la zona sobre la que actúa la banda: band pass para
 campanas y notches, paso bajo o alto para shelves, y para los cortes el

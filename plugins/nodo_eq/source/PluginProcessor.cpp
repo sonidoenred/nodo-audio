@@ -31,6 +31,7 @@ NodoEqProcessor::NodoEqProcessor()
     analyserValue     = apvts.getRawParameterValue (ids::analyserMode);
     filterModeValue   = apvts.getRawParameterValue (ids::filterMode);
     dynSidechainValue = apvts.getRawParameterValue (ids::dynSidechain);
+    deltaValue        = apvts.getRawParameterValue (ids::delta);
     bypassParameter   = apvts.getParameter (ids::bypass);
 
     /*  The plugin claims its colour here rather than in the editor: the
@@ -93,6 +94,15 @@ void NodoEqProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
     bypassRamp.reset (hostSampleRate, 0.01);
     bypassRamp.setCurrentAndTargetValue (bypassValue != nullptr && bypassValue->load() > 0.5f ? 0.0f : 1.0f);
 
+    deltaRamp.reset (hostSampleRate, 0.01);
+    deltaRamp.setCurrentAndTargetValue (deltaValue != nullptr && deltaValue->load() > 0.5f ? 1.0f : 0.0f);
+
+    /*  Reservado para la latencia mas larga que puede declarar el plugin, que
+        es la del sobremuestreo. Se pide de sobra —64 muestras— porque el
+        semibanda de JUCE no promete un numero y esto se dimensiona una sola vez.
+    */
+    dryDelay.prepare ((int) numChannels, (int) maxBlock, 64);
+
     dryBuffer.setSize ((int) numChannels, (int) maxBlock, false, false, true);
     sidechainBuffer.setSize ((int) numChannels, (int) maxBlock, false, false, true);
 
@@ -110,6 +120,8 @@ void NodoEqProcessor::releaseResources()
 
     if (sidechainOversampler != nullptr)
         sidechainOversampler->reset();
+
+    dryDelay.reset();
 }
 
 bool NodoEqProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -145,6 +157,13 @@ void NodoEqProcessor::updateLatency()
 
     if (latency != getLatencySamples())
         setLatencySamples (latency);
+
+    /*  La seca se retrasa lo mismo que declara el plugin, y no lo que mide el
+        sobremuestreador. Son casi lo mismo —el semibanda tiene latencia
+        fraccionaria y esto es el redondeo— pero el que importa es el declarado:
+        es el que el anfitrion usa para alinear esta pista con las demas.
+    */
+    dryDelay.setDelay (latency);
 }
 
 std::array<BandSettings, numBands> NodoEqProcessor::getBandSettings() const
@@ -237,18 +256,29 @@ void NodoEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     if (mode == AnalyserMode::pre || mode == AnalyserMode::both)
         preAnalyser.pushBlock (main);
 
-    // Keep a dry copy so bypass can crossfade instead of switching abruptly.
+    /*  La copia seca, retrasada lo mismo que la salida del plugin. La usan dos
+        cosas: el fundido del bypass y el delta.
+
+        Se hace en todos los bloques aunque no se use en este, porque la linea
+        de retardo tiene que ver todas las muestras. Si solo se alimentara
+        cuando hace falta, el primer bloque despues de encender el delta leeria
+        un hueco de silencio de hace veinte muestras.
+
+        Retrasarla tambien arregla algo que estaba mal desde el principio: con
+        el sobremuestreo encendido, el bypass devolvia la senal seca sin
+        retrasar mientras el plugin seguia declarando latencia, asi que la pista
+        en bypass sonaba adelantada respecto a las demas.
+    */
+    dryBuffer.setSize (totalOut, numSamples, false, false, true);
+
+    for (int ch = 0; ch < totalOut; ++ch)
+        dryBuffer.copyFrom (ch, 0, main, ch, 0, numSamples);
+
+    dryDelay.process (dryBuffer, dryBuffer, numSamples);
+
     const auto bypassRequested = bypassValue != nullptr && bypassValue->load() > 0.5f;
     bypassRamp.setTargetValue (bypassRequested ? 0.0f : 1.0f);
     const auto needsCrossfade = bypassRamp.isSmoothing() || bypassRequested;
-
-    if (needsCrossfade)
-    {
-        dryBuffer.setSize (totalOut, numSamples, false, false, true);
-
-        for (int ch = 0; ch < totalOut; ++ch)
-            dryBuffer.copyFrom (ch, 0, main, ch, 0, numSamples);
-    }
 
     const auto wantsOversampling = oversamplingValue != nullptr && oversamplingValue->load() > 0.5f;
 
@@ -339,6 +369,29 @@ void NodoEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             main.getWritePointer (ch)[i] *= gain;
     }
 
+    /*  Delta: la senal procesada menos la seca, o sea solo lo que el
+        ecualizador esta haciendo. Va despues de la ganancia de salida a
+        proposito, porque lo que se quiere oir es la diferencia que sale del
+        plugin, incluida la ganancia que el propio plugin aplica.
+
+        Se cruza con una rampa en vez de conmutar: la diferencia entre la senal
+        y la senal menos ella misma es enorme, y sin rampa el boton sonaria a
+        chasquido cada vez.
+    */
+    const auto deltaRequested = deltaValue != nullptr && deltaValue->load() > 0.5f;
+    deltaRamp.setTargetValue (deltaRequested ? 1.0f : 0.0f);
+
+    if (deltaRequested || deltaRamp.isSmoothing())
+    {
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const auto mix = deltaRamp.getNextValue();
+
+            for (int ch = 0; ch < totalOut; ++ch)
+                main.getWritePointer (ch)[i] -= mix * dryBuffer.getReadPointer (ch)[i];
+        }
+    }
+
     if (needsCrossfade)
     {
         for (int i = 0; i < numSamples; ++i)
@@ -359,6 +412,20 @@ void NodoEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     if (mode == AnalyserMode::post || mode == AnalyserMode::both)
         postAnalyser.pushBlock (main);
+}
+
+void NodoEqProcessor::sortBandsByFrequency()
+{
+    /*  Con veinticuatro bandas y la costumbre de crearlas con doble clic donde
+        haga falta, los numeros de los nodos acaban sin ningun orden: la 7 en el
+        grave y la 2 en el aire. El numero es lo unico que identifica a una
+        banda en el teclado, en el panel y en la automatizacion del anfitrion,
+        asi que poder reordenarlos de grave a agudo de una vez vale la pena.
+    */
+    nodo::eq::sortBandsByFrequency (apvts);
+
+    // El solo apuntaba a un numero de banda, y ese numero ya es otra banda.
+    setSoloBand (-1);
 }
 
 void NodoEqProcessor::switchToSlot (bool useSlotB)

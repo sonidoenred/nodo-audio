@@ -92,6 +92,14 @@ float NodoLimitProcessor::getMeterLevel (int index) const noexcept
                      : outputLevels[channel].getLevel();
 }
 
+float NodoLimitProcessor::getMeterRms (int index) const noexcept
+{
+    const auto channel = (size_t) juce::jlimit (0, 1, index % 2);
+
+    return index < 2 ? inputLevels[channel].getRms()
+                     : outputLevels[channel].getRms();
+}
+
 float NodoLimitProcessor::getDistanceToTargetLu()
 {
     const auto settings = getSettings();

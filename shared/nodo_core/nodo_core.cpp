@@ -9,3 +9,4 @@
 #include "dsp/MatchedBiquad.cpp"
 #include "dsp/SpectrumAnalyser.cpp"
 #include "presets/PresetManager.cpp"
+#include "support/ProblemReport.cpp"

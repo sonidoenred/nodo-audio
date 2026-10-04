@@ -69,6 +69,9 @@ public:
     /** GUI. Index 0 and 1 are input channels, 2 and 3 output. */
     float getMeterLevel (int index) const noexcept;
 
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
+
     /** Clears the held peak and restarts the integrated loudness measurement.
         Deferred to the audio thread rather than done here: the meter's state is
         only ever touched from there.

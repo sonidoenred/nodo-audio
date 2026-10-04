@@ -1062,6 +1062,16 @@ void EqCurveComponent::mouseDown (const juce::MouseEvent& event)
 
     if (band < 0)
     {
+        /*  Clic derecho en el fondo: las utilidades que no tienen sitio en el
+            pie. Va aqui y no en un boton porque es algo que se hace de vez en
+            cuando, y el pie ya esta lleno de cosas que se tocan a menudo.
+        */
+        if (event.mods.isPopupMenu())
+        {
+            showBackgroundMenu();
+            return;
+        }
+
         setSelectedBand (-1);
         return;
     }
@@ -1083,6 +1093,27 @@ void EqCurveComponent::mouseDown (const juce::MouseEvent& event)
 
     dragOffset = nodePosition (band) - event.position;
     beginDrag (band);
+}
+
+void EqCurveComponent::showBackgroundMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&getLookAndFeel());
+
+    auto enabledBands = 0;
+
+    for (const auto& s : settings)
+        if (s.enabled)
+            ++enabledBands;
+
+    menu.addItem (1, "Sort bands by frequency", enabledBands > 1);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withParentComponent (getTopLevelComponent()),
+                        [this] (int result)
+                        {
+                            if (result == 1 && onSortBandsRequested != nullptr)
+                                onSortBandsRequested();
+                        });
 }
 
 void EqCurveComponent::mouseDrag (const juce::MouseEvent& event)

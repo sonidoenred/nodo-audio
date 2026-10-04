@@ -34,6 +34,7 @@ private:
     NodoKnob outputKnob { "Output" };
     juce::TextButton autoGainButton { "AUTO" };
     juce::TextButton pianoRollButton { "KEYS" };
+    juce::TextButton deltaButton { "DELTA" };
     juce::ComboBox oversamplingBox;
     juce::ComboBox filterModeBox;
     juce::ComboBox dynSidechainBox;
@@ -45,6 +46,7 @@ private:
 
     std::unique_ptr<ButtonAttachment> bypassAttachment;
     std::unique_ptr<ButtonAttachment> autoGainAttachment;
+    std::unique_ptr<ButtonAttachment> deltaAttachment;
     std::unique_ptr<ComboAttachment> oversamplingAttachment;
     std::unique_ptr<ComboAttachment> analyserAttachment;
     std::unique_ptr<ComboAttachment> filterModeAttachment;

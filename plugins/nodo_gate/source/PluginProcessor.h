@@ -52,6 +52,9 @@ public:
     bool  isGateOpen() const noexcept { return engine.isOpen(); }
     float getMeterLevel (int index) const noexcept;
 
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
+
     /** True when the host has actually connected something to the sidechain bus,
         so the interface can say so instead of leaving the user guessing why the
         external setting is doing nothing.

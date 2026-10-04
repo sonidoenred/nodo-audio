@@ -35,6 +35,11 @@ public:
     /** Fired when the selected band changes, so the panel below can follow. */
     std::function<void (int)> onBandSelected;
 
+    /** Lo pide el menu del fondo. Reordenar bandas toca los parametros de las
+        veinticuatro, asi que lo hace el procesador y no el dibujo.
+    */
+    std::function<void()> onSortBandsRequested;
+
     void setSelectedBand (int band);
     int  getSelectedBand() const noexcept { return selectedBand; }
 
@@ -96,6 +101,7 @@ private:
 
     void addBandAt (juce::Point<float> position);
     void showBandMenu (int band);
+    void showBackgroundMenu();
     void beginDrag (int band);
     void endDrag();
     void toggleSolo (int band);

@@ -100,6 +100,16 @@ void EqEngine::updateDetector (int band, const BandSettings& settings)
 {
     auto& detector = detectors[(size_t) band];
 
+    /*  Al cambiar entre banda ancha y banda estrecha, los filtros del detector
+        dejan de usarse o vuelven a usarse, y mientras tanto su estado interno
+        se queda congelado con lo ultimo que pasaron. Vaciarlo aqui evita el
+        golpe que daria al volver, que es una muestra vieja de hace un rato
+        entrando en un filtro con coeficientes nuevos.
+    */
+    if (! detector.valid || detector.designedFor.dynWideband != settings.dynWideband)
+        for (auto& filter : detector.filters)
+            filter.reset();
+
     detector.design = EqBand::soloDesignFor (settings, sampleRate);
     detector.designedFor = settings;
     detector.valid = true;
@@ -132,14 +142,27 @@ float EqEngine::detectLevelDb (int band, const BandSettings& settings, size_t nu
         }
     }
 
-    for (int stage = 0; stage < detector.design.numStages; ++stage)
+    /*  Banda ancha: el detector escucha la senal tal cual, sin filtrar por la
+        zona de la banda.
+
+        Es la diferencia entre un de-esser y un ducking. Filtrando, la banda
+        reacciona a lo que ella misma toca, que es lo que uno quiere el 90 % de
+        las veces. Sin filtrar, reacciona a la mezcla entera, y entonces se
+        puede pedir algo que de otra forma no se puede pedir: baja los graves
+        cuando entra el bombo, aunque el bombo no este donde estan los graves
+        que te molestan.
+    */
+    if (! settings.dynWideband)
     {
-        auto& filter = detector.filters[(size_t) stage];
+        for (int stage = 0; stage < detector.design.numStages; ++stage)
+        {
+            auto& filter = detector.filters[(size_t) stage];
 
-        for (size_t i = 0; i < numSamples; ++i)
-            detectorScratch[i] = filter.processSample (detectorScratch[i]);
+            for (size_t i = 0; i < numSamples; ++i)
+                detectorScratch[i] = filter.processSample (detectorScratch[i]);
 
-        filter.snapToZero();
+            filter.snapToZero();
+        }
     }
 
     float envelope = 0.0f;

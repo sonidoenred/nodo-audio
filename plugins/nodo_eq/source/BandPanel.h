@@ -42,6 +42,7 @@ private:
     juce::ComboBox channelBox;
 
     juce::TextButton dynamicButton { "DYN" };
+    juce::TextButton wideButton { "WIDE" };
     juce::ComboBox dynamicModeBox;
     NodoSlimSlider dynRangeSlider { "Range" };
     NodoKnob thresholdKnob { "Threshold" };
@@ -54,6 +55,14 @@ private:
     juce::Label noteLabel;
     juce::Label dynamicHint;
 
+    /*  La reduccion de ganancia, como etiqueta y no como texto pintado por el
+        panel. Antes se dibujaba a la derecha del selector de direccion, que es
+        exactamente donde acabo viviendo el mando Range cuando se rehizo el modo
+        dinamico: un hijo pinta encima de su padre, asi que la cifra llevaba
+        desde entonces escondida detras del deslizador.
+    */
+    juce::Label reductionLabel;
+
     float gainReductionDb { 0.0f };
 
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -64,6 +73,7 @@ private:
     std::unique_ptr<ComboAttachment> slopeAttachment;
     std::unique_ptr<ComboAttachment> channelAttachment;
     std::unique_ptr<ButtonAttachment> dynamicAttachment;
+    std::unique_ptr<ButtonAttachment> wideAttachment;
     std::unique_ptr<ComboAttachment> dynamicModeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BandPanel)

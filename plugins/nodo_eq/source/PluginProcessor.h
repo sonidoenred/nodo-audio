@@ -82,6 +82,13 @@ public:
         return i < 2 ? inputLevels[i].getLevel() : outputLevels[i - 2].getLevel();
     }
 
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept
+    {
+        const auto i = (size_t) juce::jlimit (0, 3, index);
+        return i < 2 ? inputLevels[i].getRms() : outputLevels[i - 2].getRms();
+    }
+
     AnalyserMode getAnalyserMode() const;
     FilterMode   getFilterMode() const;
 
@@ -113,6 +120,11 @@ public:
     bool getPianoRollVisible() const;
     void setPianoRollVisible (bool shouldBeVisible);
 
+    /** Reordena las bandas encendidas por frecuencia, de grave a agudo, y deja
+        las apagadas al final. Accion del usuario, no un parametro.
+    */
+    void sortBandsByFrequency();
+
 private:
     static juce::AudioProcessor::BusesProperties busesProperties();
     void updateLatency();
@@ -130,7 +142,15 @@ private:
 
     juce::SmoothedValue<float> outputGain;
     juce::SmoothedValue<float> bypassRamp;   // click-free bypass crossfade
+    juce::SmoothedValue<float> deltaRamp;    // igual, para no meter un chasquido al restar
     juce::AudioBuffer<float> dryBuffer, sidechainBuffer;
+
+    /*  La seca retrasada la misma latencia que declara el plugin. La usan el
+        delta y el fundido del bypass: las dos comparan la senal procesada con
+        la seca, y con el sobremuestreo encendido esas dos cosas no ocurren a la
+        vez.
+    */
+    nodo::dsp::SampleDelay dryDelay;
     std::unique_ptr<juce::dsp::Oversampling<float>> sidechainOversampler;
     std::atomic<bool> sidechainConnected { false };
     std::atomic<bool> audioHasRun { false };
@@ -142,6 +162,7 @@ private:
     std::atomic<float>* analyserValue { nullptr };
     std::atomic<float>* filterModeValue { nullptr };
     std::atomic<float>* dynSidechainValue { nullptr };
+    std::atomic<float>* deltaValue { nullptr };
     juce::AudioProcessorParameter* bypassParameter { nullptr };
 
     std::atomic<int> soloBand { -1 };

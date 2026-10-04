@@ -1,5 +1,7 @@
 #include "EqParameters.h"
 
+#include <algorithm>
+
 namespace nodo::eq
 {
 juce::StringArray filterTypeNames()
@@ -58,6 +60,7 @@ namespace ids
     juce::String bandAttack   (int band) { return "band" + juce::String (band + 1) + "_att"; }
     juce::String bandRelease  (int band) { return "band" + juce::String (band + 1) + "_rel"; }
     juce::String bandDynRange (int band) { return "band" + juce::String (band + 1) + "_dynrange"; }
+    juce::String bandDynWide  (int band) { return "band" + juce::String (band + 1) + "_dynwide"; }
 }
 
 namespace
@@ -256,6 +259,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                 .withValueFromStringFunction ([] (const juce::String& t) { return format::decibelsFromText (t); })));
     }
 
+    /*  Y al final del todo, por la misma razon, dos cosas nuevas: de donde lee
+        el detector de cada banda y el delta.
+
+        El delta no cambia el ajuste de nada: resta la senal seca de la
+        procesada para que se oiga solo lo que el ecualizador esta haciendo. Es
+        un parametro y no un boton de la interfaz porque tiene que sobrevivir a
+        guardar la sesion; que el anfitrion pueda automatizarlo es un efecto
+        secundario, no la intencion.
+    */
+    for (int band = 0; band < numBands; ++band)
+    {
+        const auto n = juce::String (band + 1);
+
+        layout.add (std::make_unique<Bool> (
+            juce::ParameterID { ids::bandDynWide (band), 1 },
+            "Band " + n + " Wide Detector",
+            false));
+    }
+
+    layout.add (std::make_unique<Bool> (
+        juce::ParameterID { ids::delta, 1 },
+        "Delta",
+        false));
+
     return layout;
 }
 
@@ -277,7 +304,58 @@ BandSettings readBand (const juce::AudioProcessorValueTreeState& state, int band
     if (auto* p = state.getRawParameterValue (ids::bandAttack (band)))  s.attackMs  = p->load();
     if (auto* p = state.getRawParameterValue (ids::bandRelease (band))) s.releaseMs = p->load();
     if (auto* p = state.getRawParameterValue (ids::bandDynRange (band))) s.dynRangeDb = p->load();
+    if (auto* p = state.getRawParameterValue (ids::bandDynWide (band))) s.dynWideband = p->load() > 0.5f;
 
     return s;
+}
+
+void applyBand (juce::AudioProcessorValueTreeState& state, int band, const BandSettings& s)
+{
+    auto set = [&state] (const juce::String& id, float plainValue)
+    {
+        if (auto* p = state.getParameter (id))
+            p->setValueNotifyingHost (p->convertTo0to1 (plainValue));
+    };
+
+    set (ids::bandEnabled (band),   s.enabled ? 1.0f : 0.0f);
+    set (ids::bandType (band),      (float) (int) s.type);
+    set (ids::bandFreq (band),      s.frequency);
+    set (ids::bandGain (band),      s.gainDb);
+    set (ids::bandQ (band),         s.q);
+    set (ids::bandSlope (band),     (float) (s.slopeStages - 1));
+    set (ids::bandChannel (band),   (float) (int) s.channel);
+    set (ids::bandDynamic (band),   s.dynamic ? 1.0f : 0.0f);
+    set (ids::bandDynMode (band),   (float) (int) s.dynamicMode);
+    set (ids::bandThreshold (band), s.thresholdDb);
+    set (ids::bandRatio (band),     s.ratio);
+    set (ids::bandAttack (band),    s.attackMs);
+    set (ids::bandRelease (band),   s.releaseMs);
+    set (ids::bandDynRange (band),  s.dynRangeDb);
+    set (ids::bandDynWide (band),   s.dynWideband ? 1.0f : 0.0f);
+}
+
+void sortBandsByFrequency (juce::AudioProcessorValueTreeState& state)
+{
+    std::array<BandSettings, numBands> settings;
+
+    for (int i = 0; i < numBands; ++i)
+        settings[(size_t) i] = readBand (state, i);
+
+    std::stable_sort (settings.begin(), settings.end(),
+                      [] (const BandSettings& a, const BandSettings& b)
+                      {
+                          /*  Las apagadas al final. Una banda apagada no tiene
+                              frecuencia que signifique nada, y mezclarlas con
+                              las encendidas rompe justo lo que se acaba de
+                              arreglar.
+                          */
+                          if (a.enabled != b.enabled)
+                              return a.enabled;
+
+                          return a.frequency < b.frequency;
+                      });
+
+    for (int i = 0; i < numBands; ++i)
+        applyBand (state, i, settings[(size_t) i]);
 }
 } // namespace nodo::eq

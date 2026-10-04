@@ -34,5 +34,7 @@
 #include "dsp/Loudness.h"
 #include "dsp/SpectrumAnalyser.h"
 #include "dsp/LevelFollower.h"
+#include "dsp/SampleDelay.h"
 #include "state/StateVersion.h"
 #include "presets/PresetManager.h"
+#include "support/ProblemReport.h"

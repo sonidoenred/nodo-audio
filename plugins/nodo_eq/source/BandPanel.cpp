@@ -27,6 +27,9 @@ BandPanel::BandPanel (NodoEqProcessor& processorToUse)
     dynamicButton.setClickingTogglesState (true);
     styleToggle (dynamicButton, colours::accentBright());
 
+    wideButton.setClickingTogglesState (true);
+    styleToggle (wideButton, colours::accentBright());
+
     soloButton.setClickingTogglesState (false);
     styleToggle (soloButton, colours::warning);
     soloButton.onClick = [this]
@@ -57,6 +60,11 @@ BandPanel::BandPanel (NodoEqProcessor& processorToUse)
     dynamicHint.setFont (fonts::regular (11.5f));
     dynamicHint.setText ("Off. The band sits at its gain.", juce::dontSendNotification);
     addAndMakeVisible (dynamicHint);
+
+    reductionLabel.setJustificationType (juce::Justification::centredRight);
+    reductionLabel.setFont (fonts::mono (11.0f));
+    reductionLabel.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (reductionLabel);
 
     noteLabel.setJustificationType (juce::Justification::centred);
     noteLabel.setColour (juce::Label::textColourId, colours::textDim);
@@ -114,6 +122,12 @@ BandPanel::BandPanel (NodoEqProcessor& processorToUse)
     addAndMakeVisible (slopeBox);
     addAndMakeVisible (channelBox);
     addAndMakeVisible (dynamicModeBox);
+    addAndMakeVisible (wideButton);
+
+    wideButton.setTooltip ("Where this band's detector listens. Off, it listens to its own "
+                            "range, which is what makes a band a de-esser. On, it listens to the "
+                            "whole signal, so the band can be moved by something that does not "
+                            "live where the band does - low end ducking under a kick, say.");
     addAndMakeVisible (thresholdKnob);
     addAndMakeVisible (ratioKnob);
     addAndMakeVisible (attackKnob);
@@ -155,6 +169,7 @@ void BandPanel::rebuildAttachments()
     channelAttachment.reset();
     dynamicAttachment.reset();
     dynamicModeAttachment.reset();
+    wideAttachment.reset();
     thresholdKnob.detach();
     ratioKnob.detach();
     attackKnob.detach();
@@ -175,6 +190,7 @@ void BandPanel::rebuildAttachments()
     channelAttachment = std::make_unique<ComboAttachment> (state, ids::bandChannel (band), channelBox);
     dynamicAttachment = std::make_unique<ButtonAttachment> (state, ids::bandDynamic (band), dynamicButton);
     dynamicModeAttachment = std::make_unique<ComboAttachment> (state, ids::bandDynMode (band), dynamicModeBox);
+    wideAttachment = std::make_unique<ButtonAttachment> (state, ids::bandDynWide (band), wideButton);
 
     thresholdKnob.attachTo (state, ids::bandThreshold (band));
     ratioKnob.attachTo (state, ids::bandRatio (band));
@@ -211,6 +227,8 @@ void BandPanel::updateEnablement()
     {
         dynamicHint.setVisible (false);
         dynamicModeBox.setVisible (false);
+        wideButton.setVisible (false);
+        reductionLabel.setVisible (false);
 
         for (auto* knob : { &thresholdKnob, &ratioKnob, &attackKnob, &releaseKnob })
             knob->setVisible (false);
@@ -243,8 +261,9 @@ void BandPanel::updateEnablement()
     // When the dynamic section is off it disappears rather than sitting there
     // greyed out. Five dimmed controls saying nothing is more visual noise than
     // one line of text saying the same thing.
-    const std::array<juce::Component*, 6> dynamicControls {
-        &dynamicModeBox, &dynRangeSlider, &thresholdKnob, &ratioKnob, &attackKnob, &releaseKnob
+    const std::array<juce::Component*, 8> dynamicControls {
+        &dynamicModeBox, &wideButton, &dynRangeSlider, &reductionLabel,
+        &thresholdKnob, &ratioKnob, &attackKnob, &releaseKnob
     };
 
     for (auto* c : dynamicControls)
@@ -258,6 +277,16 @@ void BandPanel::updateEnablement()
     gainReductionDb = dynamicLive
                     ? processor.getCurrentGainDb (currentBand)
                     : 0.0f;
+
+    /*  La cifra solo aparece cuando la banda se esta moviendo de verdad. Un
+        "0.0 dB" permanente es ruido: lo que dice algo es que de pronto haya un
+        numero ahi.
+    */
+    reductionLabel.setColour (juce::Label::textColourId, colours::forBand (currentBand));
+    reductionLabel.setText (std::abs (gainReductionDb) < 0.05f
+                                ? juce::String()
+                                : format::decibels (gainReductionDb),
+                            juce::dontSendNotification);
 
     noteLabel.setText (format::noteName (settings.frequency), juce::dontSendNotification);
 }
@@ -295,19 +324,6 @@ void BandPanel::paint (juce::Graphics& g)
     g.setFont (fonts::bold (12.0f));
     g.drawText (juce::String (currentBand + 1), badge, juce::Justification::centred, false);
 
-    // Gain reduction, next to the DYN button, only while it is doing something.
-    if (! dynamicButton.getToggleState() || std::abs (gainReductionDb) < 0.05f)
-        return;
-
-    // To the right of the mode box, not of the DYN button: the button's immediate
-    // right is where the mode box lives, and a child component paints over this.
-    auto meter = juce::Rectangle<float> ((float) dynamicModeBox.getRight() + 10.0f,
-                                         (float) dynamicButton.getY() + 4.0f, 92.0f, 16.0f);
-
-    g.setFont (fonts::mono (11.0f));
-    g.setColour (colour);
-    g.drawText (format::decibels (gainReductionDb), meter,
-                juce::Justification::centredLeft, false);
 }
 
 void BandPanel::resized()
@@ -362,18 +378,29 @@ void BandPanel::resized()
     auto dynLeft = dynamics.removeFromLeft (260);
     dynLeft.removeFromLeft (30);
 
-    // Centred in the dynamics row so DYN lines up with the middle of the knobs
-    // beside it rather than sitting down at the level of their value readouts.
-    auto dynRow = dynLeft.withSizeKeepingCentre (dynLeft.getWidth(), 24);
-    dynamicButton.setBounds (dynRow.removeFromLeft (50));
-    dynRow.removeFromLeft (6);
-    dynamicModeBox.setBounds (dynRow.removeFromLeft (92));
+    /*  Dos lineas, centradas en la fila: arriba lo que decide como se comporta
+        la banda y abajo cuanto viaja. Antes iba todo en una y el recorrido no
+        cabia; ahora ademas hay que meter de donde escucha el detector.
+    */
+    auto dynRow = dynLeft.withSizeKeepingCentre (dynLeft.getWidth(), 52);
+    auto topLine = dynRow.removeFromTop (24);
+    dynRow.removeFromTop (6);
+    auto bottomLine = dynRow.removeFromTop (22);
 
-    // El recorrido y el aviso ocupan el mismo sitio: el aviso solo existe
-    // mientras la dinamica esta apagada, y entonces no hay recorrido que poner.
-    dynamicHint.setBounds (dynRow.withWidth (240));
-    dynRangeSlider.setBounds (dynRow.removeFromLeft (juce::jmax (96, dynRow.getWidth()))
-                                   .withSizeKeepingCentre (juce::jmax (96, dynRow.getWidth()), 20));
+    dynamicButton.setBounds (topLine.removeFromLeft (50));
+    topLine.removeFromLeft (6);
+
+    // El aviso ocupa el resto de la linea de arriba: solo existe mientras la
+    // dinamica esta apagada, y entonces no hay nada mas que poner ahi.
+    dynamicHint.setBounds (topLine);
+
+    dynamicModeBox.setBounds (topLine.removeFromLeft (86));
+    topLine.removeFromLeft (6);
+    wideButton.setBounds (topLine.removeFromLeft (42));
+    topLine.removeFromLeft (4);
+    reductionLabel.setBounds (topLine);
+
+    dynRangeSlider.setBounds (bottomLine);
 
     dynamics.removeFromLeft (12);
 

@@ -145,6 +145,15 @@ struct BandSettings
         que encender la dinamica apagaba la banda hasta que entrara senal.
     */
     float       dynRangeDb { 0.0f };
+
+    /*  De donde lee el detector. Por defecto lee la zona de la propia banda,
+        que es lo que convierte una banda en un de-esser. Encendido lee la senal
+        entera, que es lo que hace falta cuando lo que tiene que disparar la
+        banda no suena donde la banda actua: bajar los graves cuando entra el
+        bombo, por ejemplo.
+    */
+    bool        dynWideband { false };
+
     float       thresholdDb { -24.0f };
     float       ratio { 4.0f };
     float       attackMs { 10.0f };
@@ -157,6 +166,7 @@ struct BandSettings
             && channel == other.channel
             && dynamic == other.dynamic
             && dynamicMode == other.dynamicMode
+            && dynWideband == other.dynWideband
             && juce::approximatelyEqual (frequency, other.frequency)
             && juce::approximatelyEqual (gainDb, other.gainDb)
             && juce::approximatelyEqual (q, other.q)
@@ -191,6 +201,7 @@ namespace ids
     juce::String bandAttack   (int band);
     juce::String bandRelease  (int band);
     juce::String bandDynRange (int band);
+    juce::String bandDynWide  (int band);
 
     inline const juce::String bypass       { "bypass" };
     inline const juce::String outputGain   { "outputGain" };
@@ -199,6 +210,7 @@ namespace ids
     inline const juce::String analyserMode { "analyserMode" };
     inline const juce::String filterMode   { "filterMode" };
     inline const juce::String dynSidechain { "dynSidechain" };
+    inline const juce::String delta        { "delta" };
 }
 
 /** Analyser display mode. Stored as a parameter so it survives session reload. */
@@ -219,4 +231,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 /** Reads a band's current target values straight from the parameter tree. */
 BandSettings readBand (const juce::AudioProcessorValueTreeState& state, int band);
+
+/** La inversa: escribe una banda entera en los parametros, avisando al
+    anfitrion de cada cambio.
+
+    La usa "ordenar por frecuencia", que no es mas que leer las veinticuatro
+    bandas, ordenarlas y volver a escribirlas en otro orden. Escribe todos los
+    campos aunque no hayan cambiado: media banda movida y media sin mover es un
+    estado que no existe en ningun sitio y seria imposible de deshacer.
+*/
+void applyBand (juce::AudioProcessorValueTreeState& state, int band, const BandSettings& settings);
+
+/** Reordena las bandas encendidas por frecuencia, de grave a agudo, y deja las
+    apagadas al final.
+
+    Vive aqui y no en el procesador porque no es proceso: es mover parametros de
+    sitio. Ademas asi se puede comprobar en los tests que la respuesta del
+    ecualizador es exactamente la misma antes y despues, que es lo unico que
+    tiene que cumplir.
+*/
+void sortBandsByFrequency (juce::AudioProcessorValueTreeState& state);
 } // namespace nodo::eq

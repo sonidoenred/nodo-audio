@@ -12,6 +12,7 @@
 
 #include <nodo_core/nodo_core.h>
 #include "EqEngine.h"
+#include "PluginProcessor.h"
 #include "FactoryPresets.h"
 #include "CompTests.h"
 #include "LimitTests.h"
@@ -1403,6 +1404,333 @@ void testAnalyserSanity()
 }
 } // namespace
 
+
+//==============================================================================
+/** El retardo entero, que es de lo que depende que el delta reste dos cosas que
+    ocurrieron a la vez.
+*/
+void testSampleDelay()
+{
+    std::printf ("\nRetardo de la senal seca\n");
+
+    nodo::dsp::SampleDelay delay;
+    delay.prepare (1, 64, 64);
+
+    juce::AudioBuffer<float> in (1, 32), out (1, 32);
+
+    auto runBlock = [&] (int startValue)
+    {
+        for (int i = 0; i < 32; ++i)
+            in.setSample (0, i, (float) (startValue + i));
+
+        delay.process (in, out, 32);
+    };
+
+    // Sin retardo, lo que entra es lo que sale, en el mismo bloque.
+    delay.setDelay (0);
+    runBlock (1);
+    checkClose (out.getSample (0, 0), 1.0, 1.0e-9, "sin retardo sale la misma muestra");
+    checkClose (out.getSample (0, 31), 32.0, 1.0e-9, "y la ultima tambien");
+
+    // Con retardo, y cruzando el limite entre dos bloques, que es donde se
+    // rompen las lineas de retardo escritas a ojo.
+    delay.reset();
+    delay.setDelay (5);
+    runBlock (1);
+    checkClose (out.getSample (0, 0), 0.0, 1.0e-9, "los primeros cinco salen a cero");
+    checkClose (out.getSample (0, 5), 1.0, 1.0e-9, "y la primera muestra sale cinco despues");
+
+    runBlock (33);
+    checkClose (out.getSample (0, 0), 28.0, 1.0e-9, "el bloque siguiente sigue por donde iba");
+    checkClose (out.getSample (0, 31), 59.0, 1.0e-9, "y termina cinco muestras atras");
+}
+
+/** El RMS del seguidor de nivel: un seno de amplitud A tiene que dar A/raiz(2). */
+void testRmsFollower()
+{
+    std::printf ("\nSeguidor de nivel\n");
+
+    constexpr double sr = 48000.0;
+    nodo::dsp::LevelFollower follower;
+    follower.prepare (sr);
+
+    std::vector<float> block (512);
+    const auto omega = 2.0 * juce::MathConstants<double>::pi * 1000.0 / sr;
+    int n = 0;
+
+    // Dos segundos, que es mucho mas que la ventana de 300 ms.
+    for (int b = 0; b < 190; ++b)
+    {
+        for (auto& sample : block)
+            sample = 0.5f * (float) std::sin (omega * n++);
+
+        follower.push (block.data(), (int) block.size());
+    }
+
+    checkClose (toDb (follower.getLevel()), toDb (0.5), 0.1,
+                "el pico de un seno de 0,5 es 0,5");
+    checkClose (toDb (follower.getRms()), toDb (0.5 / std::sqrt (2.0)), 0.2,
+                "y su RMS esta 3 dB por debajo");
+}
+
+/** El detector de banda ancha.
+
+    Una banda aguda dinamica con un tono grave sonando: filtrando no se entera de
+    nada y no se mueve; escuchando la senal entera se mueve del todo. Esa
+    diferencia es la funcion entera.
+*/
+void testWidebandDetector()
+{
+    std::printf ("\nDetector de banda ancha\n");
+
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 512;
+
+    auto runWith = [&] (bool wideband)
+    {
+        nodo::eq::EqEngine engine;
+        engine.prepare ({ sr, (juce::uint32) blockSize, 2 });
+
+        std::array<nodo::eq::BandSettings, nodo::eq::numBands> bands;
+
+        auto& band = bands[0];
+        band.enabled = true;
+        band.type = nodo::eq::FilterType::bell;
+        band.frequency = 8000.0f;
+        band.gainDb = 0.0f;
+        band.q = 1.0f;
+        band.dynamic = true;
+        band.dynamicMode = nodo::eq::DynamicMode::above;
+        band.dynRangeDb = -12.0f;
+        band.thresholdDb = -30.0f;
+        band.ratio = 20.0f;
+        band.attackMs = 1.0f;
+        band.releaseMs = 50.0f;
+        band.dynWideband = wideband;
+
+        engine.setTargets (bands);
+
+        juce::AudioBuffer<float> buffer (2, blockSize);
+        const auto omega = 2.0 * juce::MathConstants<double>::pi * 100.0 / sr;
+        int n = 0;
+
+        // Un segundo de tono grave a -6 dBFS, muy por encima del umbral.
+        for (int b = 0; b < 94; ++b)
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto sample = 0.5f * (float) std::sin (omega * n++);
+                buffer.setSample (0, i, sample);
+                buffer.setSample (1, i, sample);
+            }
+
+            juce::dsp::AudioBlock<float> block (buffer);
+            engine.process (block, nullptr);
+        }
+
+        return engine.getCurrentGainDb (0);
+    };
+
+    const auto narrow = runWith (false);
+    const auto wide = runWith (true);
+
+    checkClose (narrow, 0.0, 0.5,
+                "con el detector en la banda, un grave no mueve una banda de 8 kHz");
+    check (wide < -8.0, "con el detector en banda ancha, la mueve del todo", wide, -12.0);
+}
+
+/** Ordenar por frecuencia no puede cambiar el sonido: es mover bandas de numero.
+
+    La prueba compara la respuesta compuesta en treinta frecuencias antes y
+    despues. Si coinciden, lo unico que ha cambiado son las etiquetas.
+*/
+void testBandSorting()
+{
+    std::printf ("\nOrdenar bandas por frecuencia\n");
+
+    constexpr double sr = 48000.0;
+
+    nodo::eq::NodoEqProcessor processor;
+    auto& state = processor.getState();
+
+    auto setBand = [&state] (int index, float frequency, float gainDb)
+    {
+        auto settings = nodo::eq::readBand (state, index);
+        settings.enabled = true;
+        settings.type = nodo::eq::FilterType::bell;
+        settings.frequency = frequency;
+        settings.gainDb = gainDb;
+        settings.q = 2.0f;
+        nodo::eq::applyBand (state, index, settings);
+    };
+
+    // A proposito en desorden, y con una apagada en medio.
+    setBand (0, 6000.0f, -4.0f);
+    setBand (1, 120.0f, 5.0f);
+    setBand (3, 900.0f, -2.5f);
+
+    auto responseAt = [&] (double frequency)
+    {
+        std::array<nodo::eq::BandSettings, nodo::eq::numBands> bands;
+
+        for (int i = 0; i < nodo::eq::numBands; ++i)
+            bands[(size_t) i] = nodo::eq::readBand (state, i);
+
+        return nodo::eq::EqEngine::magnitudeDbAt (bands, frequency, sr,
+                                                  nodo::eq::FilterMode::analogMatched);
+    };
+
+    std::vector<double> before;
+
+    for (int i = 0; i < 30; ++i)
+        before.push_back (responseAt (20.0 * std::pow (1000.0, i / 29.0)));
+
+    nodo::eq::sortBandsByFrequency (state);
+
+    const auto first  = nodo::eq::readBand (state, 0);
+    const auto second = nodo::eq::readBand (state, 1);
+    const auto third  = nodo::eq::readBand (state, 2);
+    const auto fourth = nodo::eq::readBand (state, 3);
+
+    checkClose (first.frequency, 120.0, 0.5, "la mas grave queda la primera");
+    checkClose (second.frequency, 900.0, 0.5, "y las demas en orden");
+    checkClose (third.frequency, 6000.0, 0.5, "hasta la mas aguda");
+    check (! fourth.enabled, "las apagadas se van al final", fourth.enabled ? 1.0 : 0.0, 0.0);
+
+    double worst = 0.0;
+
+    for (int i = 0; i < 30; ++i)
+        worst = juce::jmax (worst, std::abs (responseAt (20.0 * std::pow (1000.0, i / 29.0))
+                                             - before[(size_t) i]));
+
+    checkClose (worst, 0.0, 0.001, "y la respuesta no ha cambiado en ninguna frecuencia");
+}
+
+/** El delta: lo que sale tiene que ser exactamente la senal procesada menos la
+    seca. Se comprueba restando de verdad, muestra a muestra.
+*/
+void testDelta()
+{
+    std::printf ("\nDelta\n");
+
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    auto configure = [] (nodo::eq::NodoEqProcessor& processor, bool delta)
+    {
+        auto& state = processor.getState();
+
+        auto band = nodo::eq::readBand (state, 0);
+        band.enabled = true;
+        band.type = nodo::eq::FilterType::bell;
+        band.frequency = 1000.0f;
+        band.gainDb = 6.0f;
+        band.q = 1.0f;
+        nodo::eq::applyBand (state, 0, band);
+
+        if (auto* p = state.getParameter (nodo::eq::ids::delta))
+            p->setValueNotifyingHost (delta ? 1.0f : 0.0f);
+
+        processor.setPlayConfigDetails (2, 2, sr, blockSize);
+        processor.prepareToPlay (sr, blockSize);
+    };
+
+    nodo::eq::NodoEqProcessor wetProcessor, deltaProcessor;
+    configure (wetProcessor, false);
+    configure (deltaProcessor, true);
+
+    juce::AudioBuffer<float> dry (2, blockSize), wet (2, blockSize), delta (2, blockSize);
+    juce::MidiBuffer midi;
+    juce::Random random (20260928);
+
+    double worst = 0.0;
+    double deltaEnergy = 0.0;
+
+    for (int b = 0; b < 40; ++b)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                dry.setSample (ch, i, random.nextFloat() * 0.5f - 0.25f);
+
+        wet.makeCopyOf (dry);
+        delta.makeCopyOf (dry);
+
+        wetProcessor.processBlock (wet, midi);
+        deltaProcessor.processBlock (delta, midi);
+
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto expected = wet.getSample (ch, i) - dry.getSample (ch, i);
+                worst = juce::jmax (worst, (double) std::abs (delta.getSample (ch, i) - expected));
+                deltaEnergy += (double) delta.getSample (ch, i) * delta.getSample (ch, i);
+            }
+        }
+    }
+
+    checkClose (worst, 0.0, 1.0e-6,
+                "lo que sale en delta es la procesada menos la seca, muestra a muestra");
+    check (deltaEnergy > 1.0e-3, "y no es silencio, que tambien cumpliria lo anterior",
+           deltaEnergy, 1.0);
+}
+
+/** El bypass tiene que salir alineado con lo demas.
+
+    Con el sobremuestreo encendido el plugin declara latencia, y el anfitrion
+    retrasa las otras pistas para compensarla. Si el bypass devolviera la senal
+    seca sin retrasar, la pista en bypass sonaria adelantada: el fallo que este
+    test existe para que no vuelva.
+*/
+void testBypassAlignment()
+{
+    std::printf ("\nAlineacion del bypass\n");
+
+    constexpr double sr = 48000.0;
+    constexpr int blockSize = 256;
+
+    nodo::eq::NodoEqProcessor processor;
+    auto& state = processor.getState();
+
+    if (auto* p = state.getParameter (nodo::eq::ids::bypass))
+        p->setValueNotifyingHost (1.0f);
+
+    if (auto* p = state.getParameter (nodo::eq::ids::oversampling))
+        p->setValueNotifyingHost (1.0f);
+
+    processor.setPlayConfigDetails (2, 2, sr, blockSize);
+    processor.prepareToPlay (sr, blockSize);
+
+    const auto latency = processor.getLatencySamples();
+    check (latency > 0, "con sobremuestreo el plugin declara latencia",
+           (double) latency, 1.0);
+
+    juce::AudioBuffer<float> buffer (2, blockSize);
+    juce::MidiBuffer midi;
+
+    buffer.clear();
+    buffer.setSample (0, 0, 1.0f);
+    buffer.setSample (1, 0, 1.0f);
+
+    processor.processBlock (buffer, midi);
+
+    auto peakIndex = 0;
+    auto peak = 0.0f;
+
+    for (int i = 0; i < blockSize; ++i)
+    {
+        if (std::abs (buffer.getSample (0, i)) > peak)
+        {
+            peak = std::abs (buffer.getSample (0, i));
+            peakIndex = i;
+        }
+    }
+
+    checkClose (peakIndex, latency, 0.0,
+                "y en bypass el impulso sale justo con ese retardo, ni antes ni despues");
+    checkClose (peak, 1.0, 1.0e-6, "intacto, sin tocar su nivel");
+}
+
 int main()
 {
     std::printf ("Nodo DSP verification\n=====================\n");
@@ -1426,6 +1754,12 @@ int main()
     testStability();
     testDenormalHandling();
     testAnalyserSanity();
+    testSampleDelay();
+    testRmsFollower();
+    testWidebandDetector();
+    testBandSorting();
+    testDelta();
+    testBypassAlignment();
 
     const auto compressor = nodo::tests::runCompressorTests();
     const auto limiter = nodo::tests::runLimiterTests();

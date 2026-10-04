@@ -52,6 +52,9 @@ public:
     float getDuckingDb() const noexcept { return engine.getDuckingDb(); }
     float getTailLevel() const noexcept { return engine.getTailLevel(); }
     float getMeterLevel (int index) const noexcept;
+
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
     double getEngineSampleRate() const noexcept { return hostSampleRate; }
 
     void switchToSlot (bool useSlotB);

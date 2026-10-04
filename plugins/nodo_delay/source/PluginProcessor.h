@@ -58,6 +58,9 @@ public:
     /** 0 and 1 are the LFOs, from -1 to 1; 2 is the envelope, from 0 to 1. */
     float getModulationSource (int index) const noexcept { return engine.getModulationSource (index); }
     float getMeterLevel (int index) const noexcept;
+
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
     double getHostBpm() const noexcept { return hostBpm.load (std::memory_order_relaxed); }
     bool isTempoKnown() const noexcept { return tempoKnown.load (std::memory_order_relaxed); }
 

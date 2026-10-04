@@ -52,6 +52,9 @@ public:
     /** GUI. Index 0 and 1 are input channels, 2 and 3 output. */
     float getMeterLevel (int index) const noexcept;
 
+    /** Lo mismo pero el RMS, para las cifras de la cabecera. */
+    float getMeterRms (int index) const noexcept;
+
     /** True when the host has actually connected something to the sidechain
         bus, so the interface can say so instead of leaving the user wondering
         why External changes nothing.

@@ -29,6 +29,7 @@ NodoEqEditor::NodoEqEditor (NodoEqProcessor& processorToUse)
     addAndMakeVisible (outputKnob);
     addAndMakeVisible (autoGainButton);
     addAndMakeVisible (pianoRollButton);
+    addAndMakeVisible (deltaButton);
     addAndMakeVisible (oversamplingBox);
     addAndMakeVisible (filterModeBox);
     addAndMakeVisible (dynSidechainBox);
@@ -46,6 +47,16 @@ NodoEqEditor::NodoEqEditor (NodoEqProcessor& processorToUse)
     autoGainAttachment = std::make_unique<ButtonAttachment> (state, ids::autoGain, autoGainButton);
 
     bypassAttachment = std::make_unique<ButtonAttachment> (state, ids::bypass, header.getBypassButton());
+
+    deltaButton.setClickingTogglesState (true);
+    deltaButton.setColour (juce::TextButton::buttonColourId, colours::panelRaised);
+    deltaButton.setColour (juce::TextButton::buttonOnColourId, colours::accent());
+    deltaButton.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
+    deltaButton.setTooltip ("Hear only the difference: the processed signal minus the dry one, "
+                            "so what comes out is exactly what the equaliser is adding or taking "
+                            "away. A cut in delta sounds like whatever you are throwing out - if "
+                            "you can hear the vocal in there, the cut is too wide.");
+    deltaAttachment = std::make_unique<ButtonAttachment> (state, ids::delta, deltaButton);
 
     oversamplingBox.addItemList ({ "OS Off", "OS 2x" }, 1);
     oversamplingAttachment = std::make_unique<ComboAttachment> (state, ids::oversampling, oversamplingBox);
@@ -95,6 +106,17 @@ NodoEqEditor::NodoEqEditor (NodoEqProcessor& processorToUse)
         resized();
     };
 
+    curve.onSortBandsRequested = [this]
+    {
+        processor.sortBandsByFrequency();
+
+        // La banda que estaba seleccionada ya es otra: mejor ninguna que la
+        // equivocada.
+        curve.setSelectedBand (-1);
+        bandPanel.setBand (-1);
+        pianoStrip.setSelectedBand (-1);
+    };
+
     curve.onBandSelected = [this] (int band)
     {
         bandPanel.setBand (band);
@@ -130,6 +152,11 @@ NodoEqEditor::NodoEqEditor (NodoEqProcessor& processorToUse)
         bandPanel.setBand (-1);
     };
     header.setLevelSource ([this] (int index) { return processor.getMeterLevel (index); });
+    header.setRmsSource ([this] (int index) { return processor.getMeterRms (index); });
+    header.setProblemReportSource ([this]
+    {
+        return nodo::buildProblemReport (processor, JucePlugin_VersionString);
+    });
     header.setSlot (processor.isSlotB());
 
     constrainer.setSizeLimits (820, 560, 1900, 1300);
@@ -211,6 +238,13 @@ void NodoEqEditor::resized()
     oversamplingBox.setBounds (processColumn.removeFromTop (boxHeight));
     processColumn.removeFromTop (5);
     dynSidechainBox.setBounds (processColumn.removeFromTop (boxHeight));
+    processColumn.removeFromTop (5);
+
+    /*  DELTA va en la columna de proceso y no en la de vista aunque sea una
+        forma de escuchar: cambia lo que sale por los altavoces, y esa es la
+        linea que separa las dos columnas.
+    */
+    deltaButton.setBounds (processColumn.removeFromTop (boxHeight));
 
     // Right group: settings that change only what you are looking at.
     viewGroupCaption = viewColumn.removeFromTop (captionHeight);
